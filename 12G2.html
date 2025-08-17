@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Mô phỏng Nội năng của nước</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background: #f0f4f8;
+    }
+    h2 {
+      color: #333;
+    }
+    #container {
+      width: 500px;
+      height: 300px;
+      border: 2px solid #333;
+      margin: 20px auto;
+      background: white;
+      position: relative;
+      overflow: hidden;
+    }
+    .particle {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: dodgerblue;
+      position: absolute;
+    }
+    .controls {
+      margin: 20px;
+    }
+    .energy {
+      font-weight: bold;
+      color: darkred;
+    }
+    canvas {
+      border: 1px solid #555;
+      background: #fff;
+    }
+  </style>
+</head>
+<body>
+  <h2>Mô phỏng sự phụ thuộc nội năng của nước vào nhiệt độ</h2>
+  <div id="container"></div>
+
+  <div class="controls">
+    <label>Nhiệt độ: <span id="tempValue">20</span>°C</label><br>
+    <input type="range" id="temperature" min="-20" max="120" value="20">
+    <p>Trạng thái: <span id="state">Nước lỏng</span></p>
+    <p>Nội năng (tương đối): <span class="energy" id="energyValue">0</span></p>
+  </div>
+
+  <canvas id="chart" width="800" height="300"></canvas>
+
+  <script>
+    const container = document.getElementById("container");
+    const tempSlider = document.getElementById("temperature");
+    const tempValue = document.getElementById("tempValue");
+    const energyValue = document.getElementById("energyValue");
+    const stateLabel = document.getElementById("state");
+
+    const canvas = document.getElementById("chart");
+    const ctx = canvas.getContext("2d");
+
+    const numParticles = 40;
+    let particles = [];
+
+    // Tạo phân tử ban đầu
+    for (let i = 0; i < numParticles; i++) {
+      const particle = document.createElement("div");
+      particle.classList.add("particle");
+      particle.style.left = Math.random() * 480 + "px";
+      particle.style.top = Math.random() * 280 + "px";
+      container.appendChild(particle);
+
+      particles.push({
+        el: particle,
+        x: parseFloat(particle.style.left),
+        y: parseFloat(particle.style.top),
+        vx: (Math.random() - 0.5) * 2,
+        vy: (Math.random() - 0.5) * 2
+      });
+    }
+
+    let temperature = 20;
+
+    function getEnergyAndState(T) {
+      let U = 0;
+      let state = "";
+
+      if (T < 0) {
+        // Nước đá
+        U = T + 20; // dịch lên để không âm
+        state = "Nước đá";
+      } else if (T === 0) {
+        U = 20; // tại điểm 0°C
+        state = "Chuyển pha: nóng chảy";
+      } else if (T > 0 && T < 100) {
+        U = 20 + T; // tăng tuyến tính
+        state = "Nước lỏng";
+      } else if (T === 100) {
+        U = 120;
+        state = "Chuyển pha: bay hơi";
+      } else {
+        U = 120 + (T - 100) * 1.5;
+        state = "Hơi nước";
+      }
+      return { U, state };
+    }
+
+    function updateParticles() {
+      particles.forEach(p => {
+        let speedFactor = 0.2;
+        if (temperature < 0) speedFactor = 0.1; // đá
+        else if (temperature >= 0 && temperature < 100) speedFactor = 0.5; // nước lỏng
+        else speedFactor = 1.2; // hơi nước
+
+        p.x += p.vx * speedFactor;
+        p.y += p.vy * speedFactor;
+
+        if (p.x <= 0 || p.x >= 490) p.vx *= -1;
+        if (p.y <= 0 || p.y >= 290) p.vy *= -1;
+
+        p.el.style.left = p.x + "px";
+        p.el.style.top = p.y + "px";
+      });
+      requestAnimationFrame(updateParticles);
+    }
+    updateParticles();
+
+    // Lưu trữ lịch sử điểm để vẽ vô tận
+    let points = [];
+    let frameCount = 0;
+
+    function drawChart() {
+      frameCount++;
+
+      // Mỗi vài frame thì thêm điểm mới
+      if (frameCount % 5 === 0) {
+        let { U } = getEnergyAndState(temperature);
+        points.push({ x: points.length, y: U });
+        if (points.length > 700) points.shift();
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Vẽ đường
+      ctx.beginPath();
+      points.forEach((p, i) => {
+        let x = 50 + i;
+        let y = 250 - p.y * 2/3;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = "blue";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Vẽ điểm hiện tại
+      let { U, state } = getEnergyAndState(temperature);
+      let lastX = 50 + (points.length - 1);
+      let lastY = 250 - U * 2/3;
+      ctx.fillStyle = "red";
+      ctx.beginPath();
+      ctx.arc(lastX, lastY, 5, 0, 2 * Math.PI);
+      ctx.fill();
+
+      tempValue.textContent = temperature;
+      energyValue.textContent = U.toFixed(1);
+      stateLabel.textContent = state;
+
+      // Trục
+      ctx.strokeStyle = "black";
+      ctx.beginPath();
+      ctx.moveTo(50, 250);
+      ctx.lineTo(50, 50);
+      ctx.moveTo(50, 250);
+      ctx.lineTo(750, 250);
+      ctx.stroke();
+
+      ctx.fillStyle = "black";
+      ctx.fillText("Thời gian", 370, 280);
+      ctx.save();
+      ctx.translate(20, 150);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillText("Nội năng (U)", 0, 0);
+      ctx.restore();
+
+      requestAnimationFrame(drawChart);
+    }
+
+    drawChart();
+
+    // Cập nhật nhiệt độ khi thay đổi thanh trượt
+    tempSlider.addEventListener("input", () => {
+      temperature = parseInt(tempSlider.value);
+    });
+  </script>
+</body>
+</html>
